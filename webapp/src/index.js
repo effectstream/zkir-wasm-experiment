@@ -4,6 +4,7 @@
 
 import { compileCompact } from './compiler.js';
 import { generateKeys, createS3ParamsProvider, getCircuitK, jsonIrToBinary } from './keygen.js';
+import { discoverWallets, connectWallet, buildProviders, loadContractModule, deploy, callCircuit, readLedgerState } from './deploy.js';
 
 const COUNTER_EXAMPLE = `import CompactStandardLibrary;
 
@@ -30,11 +31,39 @@ const sourceInput = document.getElementById('source-input');
 const compileBtn = document.getElementById('compile-btn');
 const keygenBtn = document.getElementById('keygen-btn');
 const logOutput = document.getElementById('log-output');
+const logPanel = document.getElementById('log-panel');
+const logToggle = document.getElementById('log-toggle');
+const logToggleLabel = document.getElementById('log-toggle-label');
 const resultOutput = document.getElementById('result-output');
 const downloadSection = document.getElementById('download-section');
 
+// Deploy UI elements
+const deploySection = document.getElementById('deploy-section');
+const networkSelect = document.getElementById('network-select');
+const connectBtn = document.getElementById('connect-btn');
+const disconnectBtn = document.getElementById('disconnect-btn');
+const deployBtn = document.getElementById('deploy-btn');
+const walletDot = document.getElementById('wallet-dot');
+const walletLabel = document.getElementById('wallet-label');
+const deployResult = document.getElementById('deploy-result');
+const contractAddressEl = document.getElementById('contract-address');
+
+// Interact UI elements
+const interactSection = document.getElementById('interact-section');
+const circuitsList = document.getElementById('circuits-list');
+const readStateBtn = document.getElementById('read-state-btn');
+const ledgerStateEl = document.getElementById('ledger-state');
+
 // State
 let compiledResult = null;
+let generatedKeys = null;       // Map<string, {proverKey, verifierKey}>
+let binaryZkirMap = null;       // Map<string, Uint8Array>
+let connectedAPI = null;
+let selectedWalletAPI = null;
+let deployedProviders = null;    // MidnightProviders after deployment
+let deployedCompiledContract = null;  // CompiledContract after deployment
+let deployedAddress = null;      // contract address after deployment
+let contractModule = null;       // dynamically loaded contract module
 
 function log(msg) {
     const line = document.createElement('div');
@@ -63,14 +92,180 @@ function downloadLink(filename, data, mimeType = 'application/octet-stream') {
     return `<a href="${url}" download="${filename}">${filename}</a> <span class="file-size">(${sizeStr})</span>`;
 }
 
+// ---------------------------------------------------------------------------
+// Deploy state helpers
+// ---------------------------------------------------------------------------
+
+function enableDeploySection() {
+    deploySection.classList.remove('disabled');
+    connectBtn.disabled = false;
+}
+
+function disableDeploySection() {
+    deploySection.classList.add('disabled');
+    connectBtn.disabled = true;
+    deployBtn.disabled = true;
+}
+
+function setWalletConnected(name) {
+    walletDot.classList.add('connected');
+    walletLabel.textContent = `Connected: ${name}`;
+    connectBtn.style.display = 'none';
+    disconnectBtn.style.display = '';
+    networkSelect.disabled = true;
+    deployBtn.disabled = false;
+}
+
+function setWalletDisconnected() {
+    walletDot.classList.remove('connected');
+    walletLabel.textContent = 'No wallet connected';
+    connectBtn.style.display = '';
+    disconnectBtn.style.display = 'none';
+    networkSelect.disabled = false;
+    deployBtn.disabled = true;
+    connectedAPI = null;
+    selectedWalletAPI = null;
+    deployedProviders = null;
+    deployedCompiledContract = null;
+    deployedAddress = null;
+    contractModule = null;
+    deployResult.style.display = 'none';
+    contractAddressEl.textContent = '—';
+    disableInteractSection();
+}
+
+function enableInteractSection() {
+    interactSection.classList.remove('disabled');
+    readStateBtn.disabled = false;
+}
+
+function disableInteractSection() {
+    interactSection.classList.add('disabled');
+    readStateBtn.disabled = true;
+    circuitsList.innerHTML = '';
+    ledgerStateEl.textContent = '';
+}
+
+/**
+ * Parse a user-entered string into a circuit argument value based on type info.
+ */
+function parseArgValue(raw, typeInfo) {
+    const typeName = typeInfo['type-name'] || typeInfo.type;
+    if (typeName === 'Uint' || typeName === 'Int') {
+        return BigInt(raw);
+    }
+    if (typeName === 'Boolean') {
+        return raw === 'true' || raw === '1';
+    }
+    if (typeName === 'Bytes') {
+        // Hex string → Uint8Array
+        const hex = raw.replace(/^0x/, '');
+        return new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+    }
+    // Default: try as bigint, fall back to string
+    try { return BigInt(raw); } catch { return raw; }
+}
+
+/**
+ * Format a circuit result value for display.
+ */
+function formatResult(val) {
+    if (val === undefined || val === null) return '(void)';
+    if (typeof val === 'bigint') return val.toString();
+    if (val instanceof Uint8Array) return '0x' + Array.from(val).map(b => b.toString(16).padStart(2, '0')).join('');
+    if (Array.isArray(val) && val.length === 0) return '(ok)';
+    if (typeof val === 'object') return JSON.stringify(val, (_, v) => typeof v === 'bigint' ? v.toString() : v);
+    return String(val);
+}
+
+/**
+ * Build the circuit interaction UI from contract-info.json metadata.
+ */
+function buildCircuitUI(contractInfo) {
+    circuitsList.innerHTML = '';
+
+    const circuits = contractInfo.circuits || [];
+    for (const circuit of circuits) {
+        if (!circuit.proof) continue; // only provable circuits
+
+        const card = document.createElement('div');
+        card.className = 'circuit-card';
+
+        // Circuit name
+        const nameEl = document.createElement('span');
+        nameEl.className = 'circuit-name';
+        nameEl.textContent = circuit.name;
+        card.appendChild(nameEl);
+
+        // Argument inputs
+        const inputs = [];
+        for (const arg of (circuit.arguments || [])) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = `${arg.name} (${arg.type['type-name'] || 'value'})`;
+            input.dataset.argName = arg.name;
+            input.dataset.argType = JSON.stringify(arg.type);
+            card.appendChild(input);
+            inputs.push({ input, type: arg.type });
+        }
+
+        // Call button
+        const callBtn = document.createElement('button');
+        callBtn.className = 'btn-accent';
+        callBtn.textContent = 'Call';
+        callBtn.addEventListener('click', async () => {
+            callBtn.disabled = true;
+            callBtn.textContent = 'Calling...';
+            resultEl.textContent = '';
+            try {
+                const args = inputs.map(({ input, type }) => parseArgValue(input.value, type));
+                const res = await callCircuit(
+                    deployedProviders, deployedCompiledContract, deployedAddress,
+                    circuit.name, args, log
+                );
+                resultEl.textContent = formatResult(res.result);
+            } catch (err) {
+                resultEl.textContent = `Error: ${err.message}`;
+                resultEl.style.color = '#f85149';
+                log(`Circuit "${circuit.name}" failed: ${err.message}`);
+            } finally {
+                callBtn.disabled = false;
+                callBtn.textContent = 'Call';
+                resultEl.style.color = '';
+            }
+        });
+        card.appendChild(callBtn);
+
+        // Result display
+        const resultEl = document.createElement('span');
+        resultEl.className = 'circuit-result';
+        card.appendChild(resultEl);
+
+        circuitsList.appendChild(card);
+    }
+}
+
 // Load example
 sourceInput.value = COUNTER_EXAMPLE;
 
+// Log panel toggle
+logToggle.addEventListener('click', () => {
+    logPanel.classList.toggle('collapsed');
+    logToggleLabel.textContent = logPanel.classList.contains('collapsed') ? 'expand' : 'collapse';
+});
+
+// ---------------------------------------------------------------------------
 // Compile handler
+// ---------------------------------------------------------------------------
 compileBtn.addEventListener('click', async () => {
     clearLog();
     compiledResult = null;
+    generatedKeys = null;
+    binaryZkirMap = null;
     keygenBtn.disabled = true;
+    disableDeploySection();
+    disableInteractSection();
+    setWalletDisconnected();
     downloadSection.innerHTML = '';
     resultOutput.innerHTML = '';
     compileBtn.disabled = true;
@@ -151,7 +346,9 @@ compileBtn.addEventListener('click', async () => {
     }
 });
 
+// ---------------------------------------------------------------------------
 // Keygen handler
+// ---------------------------------------------------------------------------
 keygenBtn.addEventListener('click', async () => {
     if (!compiledResult) return;
 
@@ -171,6 +368,20 @@ keygenBtn.addEventListener('click', async () => {
 
         const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
         log(`Key generation completed in ${elapsed}s`);
+
+        // Store keys for deployment
+        generatedKeys = keys;
+
+        // Build binary ZKIR map for deployment
+        binaryZkirMap = new Map();
+        for (const [name, json] of compiledResult.zkir.entries()) {
+            try {
+                const binary = await jsonIrToBinary(json);
+                binaryZkirMap.set(name, binary);
+            } catch (e) {
+                log(`Warning: could not convert ${name}.zkir to binary: ${e.message}`);
+            }
+        }
 
         // Populate the keys/ section in the file tree
         const keysTree = document.getElementById('keys-tree');
@@ -195,11 +406,161 @@ keygenBtn.addEventListener('click', async () => {
             }
         }
 
-        log('Done! Download links available.');
+        // Enable deploy section
+        enableDeploySection();
+
+        log('Done! Download links available. You can now deploy to a network.');
     } catch (err) {
         log(`ERROR: ${err.message}`);
     } finally {
         keygenBtn.disabled = false;
         keygenBtn.textContent = 'Generate Keys';
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Connect Wallet handler
+// ---------------------------------------------------------------------------
+connectBtn.addEventListener('click', async () => {
+    const wallets = discoverWallets();
+    if (wallets.length === 0) {
+        log('No Midnight wallet detected. Install the Lace wallet extension.');
+        alert('No Midnight wallet detected. Please install the Lace wallet browser extension.');
+        return;
+    }
+
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Connecting...';
+
+    try {
+        // Use the first available wallet
+        selectedWalletAPI = wallets[0];
+        const networkId = networkSelect.value;
+
+        log(`Connecting to ${selectedWalletAPI.name} on ${networkId}...`);
+        connectedAPI = await connectWallet(selectedWalletAPI, networkId);
+        log(`Connected to ${selectedWalletAPI.name}`);
+
+        // Show balances
+        try {
+            const shieldedBalances = await connectedAPI.getShieldedBalances();
+            const unshieldedBalances = await connectedAPI.getUnshieldedBalances();
+            const shieldedTotal = Object.values(shieldedBalances).reduce((sum, val) => sum + val, 0n);
+            const unshieldedTotal = Object.values(unshieldedBalances).reduce((sum, val) => sum + val, 0n);
+            log(`Balances — Shielded: ${shieldedTotal}, Unshielded: ${unshieldedTotal}`);
+        } catch (e) {
+            log(`Could not fetch balances: ${e.message}`);
+        }
+
+        setWalletConnected(selectedWalletAPI.name);
+    } catch (err) {
+        log(`Wallet connection failed: ${err.message}`);
+        alert('Failed to connect wallet: ' + err.message);
+    } finally {
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Connect Wallet';
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Disconnect handler
+// ---------------------------------------------------------------------------
+disconnectBtn.addEventListener('click', () => {
+    setWalletDisconnected();
+    log('Wallet disconnected.');
+});
+
+// ---------------------------------------------------------------------------
+// Deploy handler
+// ---------------------------------------------------------------------------
+deployBtn.addEventListener('click', async () => {
+    if (!connectedAPI || !compiledResult || !generatedKeys || !binaryZkirMap) return;
+
+    deployBtn.disabled = true;
+    deployBtn.textContent = 'Deploying...';
+
+    try {
+        log('Loading contract module...');
+        contractModule = await loadContractModule(compiledResult.contractJs);
+        log('Contract module loaded.');
+
+        log('Building providers...');
+        const providers = await buildProviders(connectedAPI, binaryZkirMap, generatedKeys, log);
+
+        const contractName = compiledResult.contractInfo?.circuits?.[0]
+            ? 'UserContract'
+            : 'Contract';
+
+        const result = await deploy(providers, contractModule, contractName, log);
+
+        // Store for interaction
+        deployedProviders = providers;
+        deployedCompiledContract = result.compiledContract;
+        deployedAddress = result.contractAddress;
+
+        // Show result
+        contractAddressEl.textContent = result.contractAddress;
+        deployResult.style.display = '';
+
+        // Enable interaction section
+        if (compiledResult.contractInfo) {
+            buildCircuitUI(compiledResult.contractInfo);
+        }
+        enableInteractSection();
+
+        log('Deployment complete! You can now interact with the contract.');
+    } catch (err) {
+        log(`Deployment failed: ${err.message}`);
+        console.error('Deploy error:', err);
+    } finally {
+        deployBtn.disabled = false;
+        deployBtn.textContent = 'Deploy Contract';
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Read Ledger State handler
+// ---------------------------------------------------------------------------
+readStateBtn.addEventListener('click', async () => {
+    if (!deployedProviders || !contractModule || !deployedAddress) return;
+
+    readStateBtn.disabled = true;
+    readStateBtn.textContent = 'Reading...';
+    ledgerStateEl.textContent = '';
+
+    try {
+        log('Reading ledger state...');
+        const state = await readLedgerState(
+            deployedProviders.publicDataProvider, contractModule, deployedAddress
+        );
+
+        if (!state) {
+            ledgerStateEl.textContent = '(no state found)';
+            log('No contract state found on-chain.');
+        } else {
+            // The ledger object uses getter properties (not enumerable).
+            // Extract them via Object.getOwnPropertyDescriptors.
+            const entries = {};
+            const descriptors = Object.getOwnPropertyDescriptors(state);
+            for (const [key, desc] of Object.entries(descriptors)) {
+                if (desc.get) {
+                    try {
+                        const val = state[key];
+                        entries[key] = typeof val === 'bigint' ? val.toString() : val;
+                    } catch (e) {
+                        entries[key] = `(error: ${e.message})`;
+                    }
+                }
+            }
+
+            ledgerStateEl.textContent = JSON.stringify(entries);
+            log(`Ledger state: ${ledgerStateEl.textContent}`);
+        }
+    } catch (err) {
+        ledgerStateEl.textContent = `Error: ${err.message}`;
+        log(`Failed to read state: ${err.message}`);
+    } finally {
+        readStateBtn.disabled = false;
+        readStateBtn.textContent = 'Read Ledger State';
     }
 });

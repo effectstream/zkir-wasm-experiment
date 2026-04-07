@@ -1,9 +1,15 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+import webpack from 'webpack';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+
+// Resolve the actual file path of process/browser so ESM strict resolution works
+const processBrowserPath = require.resolve('process/browser');
 
 export default {
     entry: './src/index.js',
@@ -29,6 +35,15 @@ export default {
                 { from: 'assets/midnight_zkir_keygen_wasm.js', to: 'midnight_zkir_keygen_wasm.js' },
             ],
         }),
+        new webpack.ProvidePlugin({
+            Buffer: ['buffer', 'Buffer'],
+            process: processBrowserPath,
+        }),
+        // Shim for isomorphic-ws: in the browser, just use native WebSocket
+        new webpack.NormalModuleReplacementPlugin(
+            /isomorphic-ws/,
+            path.resolve(__dirname, 'src/ws-shim.js')
+        ),
     ],
     devServer: {
         static: {
@@ -48,6 +63,25 @@ export default {
         asyncWebAssembly: true,
     },
     resolve: {
-        extensions: ['.js', '.mjs'],
+        extensions: ['.js', '.mjs', '.ts'],
+        alias: {
+            // Fix "process/browser" fully-specified resolution in ESM modules (e.g. effect)
+            'process/browser': processBrowserPath,
+        },
+        fallback: {
+            assert: 'assert',
+            buffer: 'buffer',
+            stream: 'stream-browserify',
+            crypto: path.resolve(__dirname, 'src/crypto-shim.js'),
+            util: 'util',
+            path: 'path-browserify',
+            os: 'os-browserify/browser',
+            process: processBrowserPath,
+            fs: false,
+            net: false,
+            tls: false,
+            child_process: false,
+            vm: false,
+        },
     },
 };
