@@ -1,0 +1,16 @@
+{
+  "name": "midnight-zkir-keygen-wasm",
+  "type": "module",
+  "description": "WASM build of zkir keygen (compile-many equivalent for browsers)",
+  "version": "0.1.0",
+  "files": [
+    "midnight_zkir_keygen_wasm_bg.wasm",
+    "midnight_zkir_keygen_wasm.js",
+    "midnight_zkir_keygen_wasm.d.ts"
+  ],
+  "main": "midnight_zkir_keygen_wasm.js",
+  "types": "midnight_zkir_keygen_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

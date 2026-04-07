@@ -1,0 +1,31 @@
+[package]
+name = "midnight-zkir-keygen-wasm"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WASM build of zkir keygen (compile-many equivalent for browsers)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+transient-crypto = { path = "../midnight-ref-ai/midnight-ledger/transient-crypto", package = "midnight-transient-crypto" }
+zkir = { path = "../midnight-ref-ai/midnight-ledger/zkir", package = "midnight-zkir" }
+serialize = { path = "../midnight-ref-ai/midnight-ledger/serialize", package = "midnight-serialize" }
+base-crypto = { path = "../midnight-ref-ai/midnight-ledger/base-crypto", package = "midnight-base-crypto" }
+
+wasm-bindgen = "=0.2.104"
+wasm-bindgen-futures = "^0.4.50"
+js-sys = "^0.3.61"
+rand = { version = "^0.8.4", features = ["getrandom"] }
+getrandom = { version = "^0.2.8", features = ["js"] }
+console_error_panic_hook = "^0.1.7"
+
+[dev-dependencies]
+wasm-bindgen-test = "^0.3.37"
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = ['-O', '--enable-reference-types', '-g']
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['-O', '--enable-reference-types']

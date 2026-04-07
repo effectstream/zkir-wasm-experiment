@@ -1,0 +1,8 @@
+# WASM builds require a clang that supports the wasm32 target.
+# On macOS: brew install llvm, then set these env vars before building:
+#   export CC=/opt/homebrew/opt/llvm/bin/clang
+#   export AR=/opt/homebrew/opt/llvm/bin/llvm-ar
+# This is needed because the blst crate compiles C code for BLS12-381.
+
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+reference-types"]
