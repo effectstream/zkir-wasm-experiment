@@ -214,7 +214,16 @@ To build from source, you need the `midnight-ledger` repository checked out at t
 
 ## Architecture
 
-### What Was Ported
+### What Was Changed (Nothing Upstream)
+
+**No modifications were made to the `midnight-ledger` crates.** This project is a thin wrapper crate that imports the existing `zkir`, `serialize`, `transient-crypto`, and `base-crypto` crates as-is via path dependencies and re-exports their functionality through `wasm-bindgen`.
+
+What was *written from scratch* for this crate:
+
+| File | Purpose |
+|------|---------|
+| `src/lib.rs` | `#[wasm_bindgen]` exports that call into the unmodified `zkir` crate (`IrSource::keygen()`, `tagged_serialize`, etc.) |
+| `src/provider.rs` | `JsParamsProvider` — bridges a JavaScript `{ getParams(k): Promise<Uint8Array> }` object to the Rust `ParamsProverProvider` trait |
 
 The native `zkir` CLI does:
 
