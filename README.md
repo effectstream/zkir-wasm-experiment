@@ -300,6 +300,7 @@ zkir-wasm/
 ├── keygen-cli.mjs            # Node.js CLI for keygen
 ├── zkir-keygen.d.ts          # TypeScript definitions
 └── webapp/                   # Demo app (Compact compiler + keygen)
+    ├── wrangler.jsonc        # Cloudflare Pages deploy config (→ compact-wasm.pages.dev)
     ├── webpack.config.js
     ├── src/
     │   ├── index.js          # UI + orchestration

@@ -7,8 +7,8 @@
         "build": "webpack --mode production",
         "dev": "webpack serve --mode development --open",
         "test": "node test.mjs",
-        "pages:dev": "npx wrangler pages dev dist",
-        "pages:deploy": "npm run build && npx wrangler pages deploy dist"
+        "pages:dev": "npx wrangler pages dev",
+        "pages:deploy": "npm run build && npx wrangler pages deploy --branch=production"
     },
     "dependencies": {
         "@midnight-ntwrk/compact-js": "2.5.0",

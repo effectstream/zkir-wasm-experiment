@@ -1,0 +1,12 @@
+{
+  // Cloudflare Pages config — single source of truth for `wrangler pages` commands.
+  // Deploys to https://compact-wasm.pages.dev
+  // Account is resolved from the logged-in Wrangler session (`wrangler login`),
+  // so no account ID or token is committed here.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "compact-wasm",
+  "pages_build_output_dir": "dist",
+  // Max compatibility date supported by the bundled workerd (1.2026040x);
+  // keep <= that so local `wrangler pages dev` doesn't reject it.
+  "compatibility_date": "2026-04-01"
+}

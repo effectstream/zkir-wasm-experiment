@@ -5,3 +5,16 @@ webapp/node_modules/
 .DS_Store
 *.swp
 .wrangler/
+
+# Secrets — never commit. Wrangler local secrets + env files.
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+
+# Claude Code local/per-user config (machine-specific; do not commit)
+.claude/settings.local.json
+.claude/launch.json
+
+# Generated example output (keygen-cli artifacts: zkir, keys, compiler output)
+example-contract/

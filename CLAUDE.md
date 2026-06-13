@@ -30,8 +30,12 @@ Both `build.sh` and `test.sh` set `CC` and `AR` to Homebrew LLVM — Apple clang
 ```bash
 npm install && npm run dev    # Dev server on :8080
 npm run build                 # Production build → webapp/dist/
-npm run pages:deploy          # Deploy to Cloudflare Pages
+npm run pages:deploy          # Build + deploy to production (compact-wasm.pages.dev)
 ```
+
+Deploy target is pinned in `webapp/wrangler.jsonc` (project `compact-wasm` → https://compact-wasm.pages.dev). The Cloudflare account comes from the local `wrangler login` session — no account ID or API token is committed. First-time setup: `npx wrangler login`.
+
+The Pages project has two branches: `production` serves the canonical `compact-wasm.pages.dev`, while any other branch (e.g. `main`) produces a preview URL. `pages:deploy` passes `--branch=production` so it always publishes to the live site.
 
 ## Architecture
 
@@ -48,7 +52,7 @@ The async bridge (`src/provider.rs`) is the key design challenge: Rust's `Params
 
 **`keygen-cli.mjs`** — Node.js CLI for batch keygen: `node keygen-cli.mjs <contract-output-dir>`. Reads `zkir/*.zkir`, writes `keys/*.prover` and `keys/*.verifier`.
 
-**Webapp (`webapp/`)** — Webpack 5 app combining the Compact compiler (Emscripten Chez Scheme WASM) with this keygen WASM. `src/compiler.js` wraps the compiler, `src/keygen.js` wraps keygen, `src/index.js` orchestrates the UI. Cloudflare Pages Function in `functions/` proxies S3 for CORS.
+**Webapp (`webapp/`)** — Webpack 5 app combining the Compact compiler (Emscripten Chez Scheme WASM) with this keygen WASM. `src/compiler.js` wraps the compiler, `src/keygen.js` wraps keygen, `src/index.js` orchestrates the UI. Cloudflare Pages Function in `functions/` proxies S3 for CORS. Deployed to Cloudflare Pages as `compact-wasm` (config in `webapp/wrangler.jsonc`).
 
 ## Critical Version Constraints
 
