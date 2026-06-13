@@ -10,9 +10,79 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
             background: #0d1117;
             color: #c9d1d9;
-            padding: 20px 20px 220px;
+            padding: 70px 20px 220px;
             max-width: 1200px;
             margin: 0 auto;
+        }
+        .stepper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+        }
+        .stepper-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+        }
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #8b949e;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .step-label {
+            font-weight: 500;
+        }
+        .step-line {
+            flex: 1;
+            height: 2px;
+            min-width: 16px;
+            margin: 0 10px;
+            background: #30363d;
+            transition: background 0.3s;
+        }
+        .step.active {
+            color: #58a6ff;
+        }
+        .step.active .step-num {
+            border-color: #58a6ff;
+            color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+        }
+        .step.completed {
+            color: #3fb950;
+        }
+        .step.completed .step-num {
+            border-color: #3fb950;
+            background: #3fb950;
+            color: #0d1117;
+        }
+        .step-line.filled {
+            background: #3fb950;
+        }
+        @media (max-width: 760px) {
+            .step-label { display: none; }
         }
         h1 {
             color: #58a6ff;
@@ -331,6 +401,20 @@
     </style>
 </head>
 <body>
+    <div class="stepper" id="stepper">
+        <div class="stepper-inner">
+            <div class="step" data-step="1"><span class="step-num">1</span><span class="step-label">Compile</span></div>
+            <div class="step-line"></div>
+            <div class="step" data-step="2"><span class="step-num">2</span><span class="step-label">Generate Keys</span></div>
+            <div class="step-line"></div>
+            <div class="step" data-step="3"><span class="step-num">3</span><span class="step-label">Connect Wallet</span></div>
+            <div class="step-line"></div>
+            <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">Deploy Contract</span></div>
+            <div class="step-line"></div>
+            <div class="step" data-step="5"><span class="step-num">5</span><span class="step-label">Interact with Contract</span></div>
+        </div>
+    </div>
+
     <div style="background: #d97706; color: #fff; padding: 10px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; font-weight: 600;">
         This site is for demonstration purposes only — not for production use.
     </div>

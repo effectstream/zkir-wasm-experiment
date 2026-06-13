@@ -112,6 +112,7 @@ let deployedProviders = null;    // MidnightProviders after deployment
 let deployedCompiledContract = null;  // CompiledContract after deployment
 let deployedAddress = null;      // contract address after deployment
 let contractModule = null;       // dynamically loaded contract module
+let hasInteracted = false;       // true after first successful circuit call / state read
 
 function log(msg) {
     const line = document.createElement('div');
@@ -147,6 +148,7 @@ function downloadLink(filename, data, mimeType = 'application/octet-stream') {
 function enableDeploySection() {
     deploySection.classList.remove('disabled');
     connectBtn.disabled = false;
+    updateStepper();
 }
 
 function disableDeploySection() {
@@ -162,6 +164,7 @@ function setWalletConnected(name) {
     disconnectBtn.style.display = '';
     networkSelect.disabled = true;
     deployBtn.disabled = false;
+    updateStepper();
 }
 
 function setWalletDisconnected() {
@@ -180,11 +183,14 @@ function setWalletDisconnected() {
     deployResult.style.display = 'none';
     contractAddressEl.textContent = '—';
     disableInteractSection();
+    hasInteracted = false;
+    updateStepper();
 }
 
 function enableInteractSection() {
     interactSection.classList.remove('disabled');
     readStateBtn.disabled = false;
+    updateStepper();
 }
 
 function disableInteractSection() {
@@ -192,6 +198,36 @@ function disableInteractSection() {
     readStateBtn.disabled = true;
     circuitsList.innerHTML = '';
     ledgerStateEl.textContent = '';
+}
+
+// ---------------------------------------------------------------------------
+// Progress stepper — reflects how far the user has advanced through the flow.
+// ---------------------------------------------------------------------------
+const stepEls = [...document.querySelectorAll('#stepper .step')];
+const stepLineEls = [...document.querySelectorAll('#stepper .step-line')];
+
+function updateStepper() {
+    // Each step is "done" once its state flag is set; the first not-done step
+    // is "active" and the rest are pending. These flags cascade-reset on
+    // recompile and wallet disconnect, so the bar rewinds automatically.
+    const done = [
+        !!compiledResult,    // 1: Compile
+        !!generatedKeys,     // 2: Generate Keys
+        !!connectedAPI,      // 3: Connect Wallet
+        !!deployedAddress,   // 4: Deploy Contract
+        hasInteracted,       // 5: Interact with Contract
+    ];
+    let active = done.findIndex(d => !d);
+    if (active === -1) active = stepEls.length; // all complete
+
+    stepEls.forEach((el, i) => {
+        el.classList.toggle('completed', done[i]);
+        el.classList.toggle('active', !done[i] && i === active);
+        const num = el.querySelector('.step-num');
+        if (num) num.textContent = done[i] ? '✓' : String(i + 1);
+    });
+    // A connector fills once the step on its left is complete.
+    stepLineEls.forEach((el, i) => el.classList.toggle('filled', done[i]));
 }
 
 /**
@@ -314,6 +350,8 @@ function buildCircuitUI(contractInfo) {
                     circuit.name, args, log
                 );
                 resultEl.textContent = formatResult(res.result);
+                hasInteracted = true;
+                updateStepper();
             } catch (err) {
                 resultEl.textContent = `Error: ${err.message}`;
                 resultEl.style.color = '#f85149';
@@ -378,6 +416,7 @@ compileBtn.addEventListener('click', async () => {
         log(`Compilation completed in ${elapsed}s`);
 
         compiledResult = result;
+        updateStepper();
 
         // Build the output file tree
         const circuits = [...result.zkir.keys()].sort();
@@ -650,6 +689,8 @@ readStateBtn.addEventListener('click', async () => {
             ledgerStateEl.textContent = JSON.stringify(entries);
             log(`Ledger state: ${ledgerStateEl.textContent}`);
         }
+        hasInteracted = true;
+        updateStepper();
     } catch (err) {
         ledgerStateEl.textContent = `Error: ${err.message}`;
         log(`Failed to read state: ${err.message}`);
@@ -658,3 +699,6 @@ readStateBtn.addEventListener('click', async () => {
         readStateBtn.textContent = 'Read Ledger State';
     }
 });
+
+// Initialise the stepper (step 1 active) once everything is wired up.
+updateStepper();
