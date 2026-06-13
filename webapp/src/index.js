@@ -26,8 +26,56 @@ export circuit reset_to_default(): [] {
   return c.resetToDefault();
 }`;
 
+const SHIELDED_MINT_EXAMPLE = `// SPDX-License-Identifier: MIT
+pragma language_version >= 0.18.0;
+
+import CompactStandardLibrary;
+
+// Shielded minting authority: mints a shielded coin to the caller's
+// public key. domain_sep namespaces the token type; nonce is evolved
+// so each mint produces a unique coin.
+export circuit mint_shielded(
+  domain_sep: Bytes<32>,
+  amount: Uint<64>,
+  nonce: Uint<128>,
+): ShieldedCoinInfo {
+  return mintShieldedToken(
+    disclose(domain_sep),
+    disclose(amount),
+    evolveNonce(disclose(nonce), disclose(domain_sep)),
+    left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey())
+  );
+}`;
+
+const UNSHIELDED_MINT_EXAMPLE = `// SPDX-License-Identifier: MIT
+pragma language_version >= 0.18.0;
+
+import CompactStandardLibrary;
+
+// Unshielded minting authority: mints an unshielded token to a public
+// user address. domain_sep namespaces the token type.
+export circuit mint_unshielded(
+  domainSep: Bytes<32>,
+  amount: Uint<64>,
+  recipient: UserAddress
+): Bytes<32> {
+  return mintUnshieldedToken(
+    disclose(domainSep),
+    disclose(amount),
+    right<ContractAddress, UserAddress>(disclose(recipient))
+  );
+}`;
+
+// Selectable editor templates, keyed by the <option> values in index.html.
+const EXAMPLES = {
+    counter: COUNTER_EXAMPLE,
+    mint_shielded: SHIELDED_MINT_EXAMPLE,
+    mint_unshielded: UNSHIELDED_MINT_EXAMPLE,
+};
+
 // UI Elements
 const sourceInput = document.getElementById('source-input');
+const exampleSelect = document.getElementById('example-select');
 const compileBtn = document.getElementById('compile-btn');
 const keygenBtn = document.getElementById('keygen-btn');
 const logOutput = document.getElementById('log-output');
@@ -147,6 +195,17 @@ function disableInteractSection() {
 }
 
 /**
+ * Human-readable placeholder hint for a circuit argument type.
+ */
+function argTypeLabel(typeInfo) {
+    const name = typeInfo['type-name'] || 'value';
+    if (name === 'Bytes' && typeInfo.length != null) {
+        return `Bytes<${typeInfo.length}>: hex or utf8:text`;
+    }
+    return name;
+}
+
+/**
  * Parse a user-entered string into a circuit argument value based on type info.
  */
 function parseArgValue(raw, typeInfo) {
@@ -158,9 +217,40 @@ function parseArgValue(raw, typeInfo) {
         return raw === 'true' || raw === '1';
     }
     if (typeName === 'Bytes') {
-        // Hex string → Uint8Array
-        const hex = raw.replace(/^0x/, '');
-        return new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+        // Bytes<N> must be EXACTLY N bytes on-chain. typeInfo.length carries N.
+        const len = typeInfo.length;
+        const trimmed = raw.trim();
+
+        // Convenience: "utf8:..." encodes text and right-pads to width (like Compact's pad()).
+        if (trimmed.startsWith('utf8:')) {
+            const enc = new TextEncoder().encode(trimmed.slice(5));
+            if (len != null && enc.length > len) {
+                throw new Error(`Bytes<${len}>: text is ${enc.length} bytes, exceeds ${len}`);
+            }
+            const out = new Uint8Array(len ?? enc.length);
+            out.set(enc, 0);
+            return out;
+        }
+
+        // Otherwise interpret as hex (optional 0x), byte-aligned.
+        const hex = trimmed.replace(/^0x/i, '');
+        if (hex.length % 2 !== 0) {
+            throw new Error(`Bytes<${len}>: hex "${raw}" has an odd number of digits`);
+        }
+        if (hex.length && !/^[0-9a-fA-F]+$/.test(hex)) {
+            throw new Error(`Bytes<${len}>: "${raw}" is not valid hex (prefix with "utf8:" to enter text)`);
+        }
+        const decoded = hex.length
+            ? new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b, 16)))
+            : new Uint8Array(0);
+        if (len == null) return decoded; // no declared width — pass through
+        if (decoded.length > len) {
+            throw new Error(`Bytes<${len}>: got ${decoded.length} bytes, expected ${len}`);
+        }
+        // Right-pad shorter input with zeros to the full declared width.
+        const out = new Uint8Array(len);
+        out.set(decoded, 0);
+        return out;
     }
     // Default: try as bigint, fall back to string
     try { return BigInt(raw); } catch { return raw; }
@@ -202,7 +292,7 @@ function buildCircuitUI(contractInfo) {
         for (const arg of (circuit.arguments || [])) {
             const input = document.createElement('input');
             input.type = 'text';
-            input.placeholder = `${arg.name} (${arg.type['type-name'] || 'value'})`;
+            input.placeholder = `${arg.name} (${argTypeLabel(arg.type)})`;
             input.dataset.argName = arg.name;
             input.dataset.argType = JSON.stringify(arg.type);
             card.appendChild(input);
@@ -245,8 +335,12 @@ function buildCircuitUI(contractInfo) {
     }
 }
 
-// Load example
-sourceInput.value = COUNTER_EXAMPLE;
+// Example picker — seed the editor with the default and swap templates on change.
+exampleSelect.value = 'counter';
+sourceInput.value = EXAMPLES[exampleSelect.value];
+exampleSelect.addEventListener('change', () => {
+    sourceInput.value = EXAMPLES[exampleSelect.value] ?? '';
+});
 
 // Log panel toggle
 logToggle.addEventListener('click', () => {

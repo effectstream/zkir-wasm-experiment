@@ -36,6 +36,37 @@
             color: #58a6ff;
             margin-bottom: 12px;
         }
+        .source-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .source-header h2 {
+            margin-bottom: 0;
+        }
+        .example-picker {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #8b949e;
+        }
+        .example-picker select {
+            padding: 6px 10px;
+            background: #0d1117;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .example-picker select:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
         textarea {
             width: 100%;
             height: 300px;
@@ -309,7 +340,17 @@
 
     <!-- Compile -->
     <div class="panel">
-        <h2>Compact Source</h2>
+        <div class="source-header">
+            <h2>Compact Source</h2>
+            <div class="example-picker">
+                <label for="example-select">Example</label>
+                <select id="example-select">
+                    <option value="counter">Counter</option>
+                    <option value="mint_shielded">Shielded Mint</option>
+                    <option value="mint_unshielded">Unshielded Mint</option>
+                </select>
+            </div>
+        </div>
         <textarea id="source-input" spellcheck="false" placeholder="Enter your Compact source code..."></textarea>
         <div class="buttons">
             <button id="compile-btn" class="btn-primary">Compile</button>
