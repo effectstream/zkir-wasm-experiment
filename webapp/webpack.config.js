@@ -12,16 +12,27 @@ const require = createRequire(import.meta.url);
 const processBrowserPath = require.resolve('process/browser');
 
 export default {
-    entry: './src/index.js',
+    entry: {
+        main: './src/index.js',
+        zswap: './src/zswap.js',
+    },
     output: {
         path: path.resolve(__dirname, 'dist'),
-        filename: 'bundle.js',
+        filename: '[name].bundle.js',
         clean: true,
     },
     plugins: [
         new HtmlWebpackPlugin({
             template: './public/index.html',
+            filename: 'index.html',
+            chunks: ['main'],
             title: 'Compact Compiler + ZKIR Keygen',
+        }),
+        new HtmlWebpackPlugin({
+            template: './public/zswap.html',
+            filename: 'zswap.html',
+            chunks: ['zswap'],
+            title: 'ZSwap',
         }),
         new CopyWebpackPlugin({
             patterns: [
