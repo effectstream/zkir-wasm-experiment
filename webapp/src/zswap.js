@@ -9,8 +9,25 @@
  * Wallet discovery/connection is reused from deploy.js. The wallet does all proving,
  * balancing, and submission — there is no ledger-level swap code here.
  */
-import { discoverWallets, connectWallet } from './deploy.js';
+import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { Transaction } from '@midnight-ntwrk/ledger-v8';
+
+// Wallet discovery/connection are inlined here (rather than imported from
+// deploy.js) so this page does NOT pull in @midnight-ntwrk/midnight-js-contracts.
+// That package minifies incorrectly in this second webpack entry, throwing
+// "ReferenceError: GetCurrentStatesForIdentity is not defined" at runtime — and
+// the swap flow doesn't need it (everything goes through the wallet connector).
+
+/** Discover Midnight wallets injected on window.midnight. */
+function discoverWallets() {
+    return window.midnight ? Object.values(window.midnight) : [];
+}
+
+/** Connect to a wallet for a given network. */
+async function connectWallet(initialAPI, networkId) {
+    setNetworkId(networkId);
+    return initialAPI.connect(networkId);
+}
 
 // --- UI elements ---
 const networkSelect = document.getElementById('network-select');
