@@ -465,6 +465,7 @@
                 <span class="dot" id="wallet-dot"></span>
                 <span id="wallet-label">No wallet connected</span>
             </div>
+            <span id="dust-balance" class="wallet-status" style="display:none;"></span>
 
             <button id="connect-btn" class="btn-accent" disabled>Connect Wallet</button>
             <button id="disconnect-btn" class="btn-outline" style="display:none;">Disconnect</button>
@@ -475,6 +476,10 @@
             <div class="deploy-info">
                 <span class="label">Contract Address:</span>
                 <span class="value address" id="contract-address">—</span>
+            </div>
+            <div class="deploy-info">
+                <span class="label">Dust fee (paid):</span>
+                <span class="value" id="deploy-dust-fee">—</span>
             </div>
         </div>
     </div>

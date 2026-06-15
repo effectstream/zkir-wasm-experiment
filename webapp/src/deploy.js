@@ -233,10 +233,15 @@ export async function deploy(providers, contractModule, contractName, onLog) {
     const contractAddress = deployed.deployTxData.public.contractAddress;
     log(`Contract deployed at: ${contractAddress}`);
 
+    // Dust fee for this deploy tx, surfaced from the finalized tx data.
+    const fees = deployed.deployTxData?.public?.fees;
+    if (fees) log(`Dust fee: ${fees.paidFees} SPECK paid (est. ${fees.estimatedFees})`);
+
     return {
         contractAddress,
         compiledContract,
         deployed,
+        fees,
     };
 }
 
@@ -274,10 +279,15 @@ export async function callCircuit(providers, compiledContract, contractAddress, 
     const txId = callTxData.public.txId;
     log(`Circuit "${circuitId}" executed. TX: ${txId}`);
 
+    // Dust fee for this call tx, surfaced from the finalized tx data.
+    const fees = callTxData?.public?.fees;
+    if (fees) log(`Dust fee: ${fees.paidFees} SPECK paid (est. ${fees.estimatedFees})`);
+
     return {
         result: callTxData.private.result,
         txId,
         callTxData,
+        fees,
     };
 }
 

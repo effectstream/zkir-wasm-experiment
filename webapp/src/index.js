@@ -95,6 +95,8 @@ const walletDot = document.getElementById('wallet-dot');
 const walletLabel = document.getElementById('wallet-label');
 const deployResult = document.getElementById('deploy-result');
 const contractAddressEl = document.getElementById('contract-address');
+const deployDustFeeEl = document.getElementById('deploy-dust-fee');
+const dustBalanceEl = document.getElementById('dust-balance');
 
 // Interact UI elements
 const interactSection = document.getElementById('interact-section');
@@ -183,6 +185,8 @@ function setWalletDisconnected() {
     deployResult.style.display = 'none';
     contractAddressEl.textContent = '—';
     disableInteractSection();
+    if (dustBalanceEl) { dustBalanceEl.textContent = ''; dustBalanceEl.style.display = 'none'; }
+    if (deployDustFeeEl) deployDustFeeEl.textContent = '—';
     hasInteracted = false;
     updateStepper();
 }
@@ -305,6 +309,27 @@ function formatResult(val) {
 }
 
 /**
+ * Format a SPECK amount (string|bigint) with digit grouping. SPECK is the
+ * atomic unit of DUST, Midnight's transaction-fee resource.
+ */
+function fmtSpeck(v) {
+    try { return BigInt(v).toLocaleString(); }
+    catch { return String(v); }
+}
+
+/** Refresh the wallet's DUST balance readout, if the wallet exposes it. */
+async function refreshDustBalance() {
+    if (!connectedAPI || typeof connectedAPI.getDustBalance !== 'function') return;
+    try {
+        const { balance, cap } = await connectedAPI.getDustBalance();
+        dustBalanceEl.textContent = `Dust: ${fmtSpeck(balance)} / ${fmtSpeck(cap)} SPECK`;
+        dustBalanceEl.style.display = '';
+    } catch (e) {
+        log(`Could not fetch dust balance: ${e.message}`);
+    }
+}
+
+/**
  * Build the circuit interaction UI from contract-info.json metadata.
  */
 function buildCircuitUI(contractInfo) {
@@ -343,6 +368,7 @@ function buildCircuitUI(contractInfo) {
             callBtn.disabled = true;
             callBtn.textContent = 'Calling...';
             resultEl.textContent = '';
+            feeEl.textContent = '';
             try {
                 const args = inputs.map(({ input, type }) => parseArgValue(input.value, type));
                 const res = await callCircuit(
@@ -350,8 +376,10 @@ function buildCircuitUI(contractInfo) {
                     circuit.name, args, log
                 );
                 resultEl.textContent = formatResult(res.result);
+                feeEl.textContent = res.fees ? `dust: ${fmtSpeck(res.fees.paidFees)} SPECK` : '';
                 hasInteracted = true;
                 updateStepper();
+                refreshDustBalance();
             } catch (err) {
                 resultEl.textContent = `Error: ${err.message}`;
                 resultEl.style.color = '#f85149';
@@ -368,6 +396,11 @@ function buildCircuitUI(contractInfo) {
         const resultEl = document.createElement('span');
         resultEl.className = 'circuit-result';
         card.appendChild(resultEl);
+
+        // Dust fee for the most recent call of this circuit.
+        const feeEl = document.createElement('span');
+        feeEl.className = 'file-size';
+        card.appendChild(feeEl);
 
         circuitsList.appendChild(card);
     }
@@ -586,6 +619,7 @@ connectBtn.addEventListener('click', async () => {
         }
 
         setWalletConnected(selectedWalletAPI.name);
+        refreshDustBalance();
     } catch (err) {
         log(`Wallet connection failed: ${err.message}`);
         alert('Failed to connect wallet: ' + err.message);
@@ -633,7 +667,9 @@ deployBtn.addEventListener('click', async () => {
 
         // Show result
         contractAddressEl.textContent = result.contractAddress;
+        deployDustFeeEl.textContent = result.fees ? `${fmtSpeck(result.fees.paidFees)} SPECK` : '(unavailable)';
         deployResult.style.display = '';
+        refreshDustBalance();
 
         // Enable interaction section
         if (compiledResult.contractInfo) {
