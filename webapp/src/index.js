@@ -308,13 +308,28 @@ function formatResult(val) {
     return String(val);
 }
 
+// 1 DUST = 10^15 SPECK (per the midnight-ledger ledger-8 dust spec).
+const SPECK_PER_DUST = 10n ** 15n;
+
 /**
- * Format a SPECK amount (string|bigint) with digit grouping. SPECK is the
- * atomic unit of DUST, Midnight's transaction-fee resource.
+ * Format a SPECK amount (string|bigint) as a human-readable DUST number
+ * (without a unit suffix). Groups the whole part and trims trailing zeros;
+ * shows up to 6 decimals, but widens for tiny amounts so a nonzero fee never
+ * renders as "0".
  */
-function fmtSpeck(v) {
-    try { return BigInt(v).toLocaleString(); }
-    catch { return String(v); }
+function fmtDust(specks) {
+    let v;
+    try { v = BigInt(specks); } catch { return String(specks); }
+    const sign = v < 0n ? '-' : '';
+    if (v < 0n) v = -v;
+    const whole = (v / SPECK_PER_DUST).toLocaleString();
+    const fracDigits = (v % SPECK_PER_DUST).toString().padStart(15, '0');
+    let frac = fracDigits.slice(0, 6).replace(/0+$/, '');
+    if (!frac && v % SPECK_PER_DUST !== 0n) {
+        const firstSig = fracDigits.search(/[1-9]/);
+        frac = fracDigits.slice(0, firstSig + 3).replace(/0+$/, '');
+    }
+    return sign + (frac ? `${whole}.${frac}` : whole);
 }
 
 /** Refresh the wallet's DUST balance readout, if the wallet exposes it. */
@@ -322,7 +337,7 @@ async function refreshDustBalance() {
     if (!connectedAPI || typeof connectedAPI.getDustBalance !== 'function') return;
     try {
         const { balance, cap } = await connectedAPI.getDustBalance();
-        dustBalanceEl.textContent = `Dust: ${fmtSpeck(balance)} / ${fmtSpeck(cap)} SPECK`;
+        dustBalanceEl.textContent = `Dust: ${fmtDust(balance)} / ${fmtDust(cap)} DUST`;
         dustBalanceEl.style.display = '';
     } catch (e) {
         log(`Could not fetch dust balance: ${e.message}`);
@@ -376,7 +391,7 @@ function buildCircuitUI(contractInfo) {
                     circuit.name, args, log
                 );
                 resultEl.textContent = formatResult(res.result);
-                feeEl.textContent = res.fees ? `dust: ${fmtSpeck(res.fees.paidFees)} SPECK` : '';
+                feeEl.textContent = res.fees ? `dust: ${fmtDust(res.fees.paidFees)} DUST` : '';
                 hasInteracted = true;
                 updateStepper();
                 refreshDustBalance();
@@ -667,7 +682,7 @@ deployBtn.addEventListener('click', async () => {
 
         // Show result
         contractAddressEl.textContent = result.contractAddress;
-        deployDustFeeEl.textContent = result.fees ? `${fmtSpeck(result.fees.paidFees)} SPECK` : '(unavailable)';
+        deployDustFeeEl.textContent = result.fees ? `${fmtDust(result.fees.paidFees)} DUST` : '(unavailable)';
         deployResult.style.display = '';
         refreshDustBalance();
 
