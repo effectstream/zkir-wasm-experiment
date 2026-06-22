@@ -46,6 +46,9 @@ export default {
                 { from: 'assets/midnight_zkir_keygen_wasm.js', to: 'midnight_zkir_keygen_wasm.js' },
             ],
         }),
+        new webpack.DefinePlugin({
+            __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+        }),
         new webpack.ProvidePlugin({
             Buffer: ['buffer', 'Buffer'],
             process: processBrowserPath,

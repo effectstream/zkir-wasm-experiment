@@ -5,6 +5,7 @@
 import { compileCompact } from './compiler.js';
 import { generateKeys, createS3ParamsProvider, getCircuitK, jsonIrToBinary } from './keygen.js';
 import { discoverWallets, connectWallet, buildProviders, loadContractModule, deploy, callCircuit, readLedgerState } from './deploy.js';
+import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 
 const COUNTER_EXAMPLE = `import CompactStandardLibrary;
 
@@ -242,6 +243,12 @@ function argTypeLabel(typeInfo) {
     if (name === 'Bytes' && typeInfo.length != null) {
         return `Bytes<${typeInfo.length}>: hex or utf8:text`;
     }
+    if (name === 'Struct' && typeInfo.name === 'UserAddress') {
+        return 'UserAddress: mn_addr_... or hex';
+    }
+    if (name === 'Struct' && typeInfo.name) {
+        return typeInfo.name;
+    }
     return name;
 }
 
@@ -291,6 +298,23 @@ function parseArgValue(raw, typeInfo) {
         const out = new Uint8Array(len);
         out.set(decoded, 0);
         return out;
+    }
+    if (typeName === 'Struct' && typeInfo.name === 'UserAddress') {
+        const trimmed = raw.trim();
+        let bytes;
+        if (trimmed.startsWith('mn_')) {
+            try {
+                const parsed = MidnightBech32m.parse(trimmed);
+                bytes = new Uint8Array(parsed.data);
+            } catch (e) {
+                throw new Error(`UserAddress: could not decode "${trimmed}": ${e.message}`);
+            }
+        } else {
+            // Hex fallback
+            const hex = trimmed.replace(/^0x/i, '');
+            bytes = new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b, 16)));
+        }
+        return { bytes };
     }
     // Default: try as bigint, fall back to string
     try { return BigInt(raw); } catch { return raw; }
@@ -420,6 +444,8 @@ function buildCircuitUI(contractInfo) {
         circuitsList.appendChild(card);
     }
 }
+
+log(`Version: ${__BUILD_TIME__}`);
 
 // Example picker — seed the editor with the default and swap templates on change.
 exampleSelect.value = 'counter';
